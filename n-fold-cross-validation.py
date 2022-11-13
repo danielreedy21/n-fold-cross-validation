@@ -2,12 +2,12 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score
 
 # read and shuffle data, create test split
 dataset = pd.read_csv("data_banknote_authentication.csv")
 shuffled_df = dataset.sample(frac=1, random_state=1).reset_index(drop=True)
-train, test = train_test_split(shuffled_df, test_size=.2)
+train, validate = train_test_split(shuffled_df, test_size=.2)
 
 # split the data frame into k folds
 def split_dataframe_by_position(df: pd.DataFrame, splits: int) -> list[pd.DataFrame]:
@@ -23,11 +23,19 @@ def split_dataframe_by_position(df: pd.DataFrame, splits: int) -> list[pd.DataFr
     return dataframes
 
 folds = split_dataframe_by_position(train, 10)
-print(len(folds))
 weights_list = []
+
+# create lists for each of the attributes to calc the average of them later
+a1_weights = []
+a2_weights = []
+a3_weights = []
+a4_weights = []
+intercepts = []
+classes = []
 
 # iterate through the folds and use each fold once as the test set 
 for idx in range(len(folds)):
+    print(f"    FOLD NUMBER {idx+1}")
     curr_test = folds[idx]
     train_p1 = folds[:idx]
     train_p2 = folds[idx+1:]
@@ -51,6 +59,13 @@ for idx in range(len(folds)):
     f1 = round(f1_score(y_test,y_pred)*100, 2)
     weights_list.append(log_reg.coef_)
 
+    a1_weights.append(log_reg.coef_[0][0])
+    a2_weights.append(log_reg.coef_[0][1])
+    a3_weights.append(log_reg.coef_[0][2])
+    a4_weights.append(log_reg.coef_[0][3])
+    intercepts.append(log_reg.intercept_)
+    classes = log_reg.classes_
+
     print(f"""
     
     accuracy score is: {accuracy}
@@ -59,12 +74,35 @@ for idx in range(len(folds)):
     
     """)
 
-print(weights_list)
-# TODO: Average the weights in the weights list
-def take_average(wl: list[np.ndarray]) -> np.ndarray:
-    average = np.zeros(len(wl[0]))
-    for array in wl:
-        print(array)
-        
+
+# calculate the average of each weight
+a1_average = sum(a1_weights)/len(a1_weights)
+a2_average = sum(a2_weights)/len(a2_weights)
+a3_average = sum(a3_weights)/len(a3_weights)
+a4_average = sum(a4_weights)/len(a4_weights)
+intercept_average = sum(intercepts)/len(intercepts)
+
+
+# create average weights array and initialize a model using them
+average_weights = np.array([[a1_average,a2_average,a3_average,a4_average]])
+log_reg_final = LogisticRegression(C=1)
+log_reg_final.coef_ = average_weights
+log_reg_final.intercept_ = intercept_average
+log_reg_final.classes_ = classes
+
+validate = pd.DataFrame(data=validate)
+y_validate = validate["class"].to_numpy()
+x_validate = validate.drop(["class"], axis=1).to_numpy()
+
+y_pred = log_reg_final.predict(x_validate)
+accuracy = round(accuracy_score(y_validate,y_pred)*100, 2)
+f1 = round(f1_score(y_validate,y_pred)*100, 2)
+
+print(f"""
+FINAL MODEL TESTED ON VALIDATION SET:
+
+    accuracy score is: {accuracy}
     
-    return wl[0]
+    f1 score is: {f1}
+    
+""")
